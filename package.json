@@ -1,0 +1,12 @@
+{
+  "name": "rawr-dsp",
+  "version": "0.0.1",
+  "description": "A powerful and easy to hack on JS audio API",
+  "author": "Yellowsink",
+  "license": "BSD-3-Clause",
+
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+
+  "scripts": {}
+}
