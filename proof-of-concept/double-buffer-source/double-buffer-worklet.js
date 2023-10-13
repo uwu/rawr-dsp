@@ -8,30 +8,7 @@ class DoubleBufferProcessor extends AudioWorkletProcessor {
 	buffer1Ready;
 	buffer2Ready;
 
-	//index;
-
-	postState() {
-		this.port.postMessage(this.buffer2IsActive ? [this.buffer2Ready, this.buffer1Ready] : [this.buffer1Ready, this.buffer2Ready]);
-	}
-
-	flip() {
-		if (this.buffer2IsActive)
-			this.buffer2Ready = false;
-		else
-			this.buffer1Ready = false;
-
-		this.buffer2IsActive = !this.buffer2IsActive;
-
-		//this.index = 0;
-	}
-
-	get isEmpty() {
-		return !this.buffer1Ready && !this.buffer2Ready;
-	}
-
-	get isSaturated() {
-		return this.buffer1Ready && this.buffer2Ready;
-	}
+	index;
 
 	constructor(...args) {
 		super(...args);
@@ -40,18 +17,19 @@ class DoubleBufferProcessor extends AudioWorkletProcessor {
 		this.buffer2 = new Float32Array(0);
 		this.buffer1Ready = this.buffer2Ready = false;
 		this.buffer2IsActive = false;
-		//this.index = 0;
+		this.index = 0;
 
 		this.port.onmessage = (e) => {
 			const wasEmpty = this.isEmpty;
 
+
 			// new buffer sent to us!
 			// write it to the inactive buffer
 			if (this.buffer2IsActive) {
-				this.buffer1 = e.data;
+				this.buffer1 = new Float32Array(e.data);
 				this.buffer1Ready = true;
 			} else {
-				this.buffer2 = e.data;
+				this.buffer2 = new Float32Array(e.data);
 				this.buffer2Ready = true;
 			}
 
@@ -62,22 +40,53 @@ class DoubleBufferProcessor extends AudioWorkletProcessor {
 		};
 	}
 
+	postState() {
+		this.port.postMessage(this.buffer2IsActive ? [this.buffer2Ready, this.buffer1Ready] : [this.buffer1Ready, this.buffer2Ready]);
+	}
+
+	flip() {
+		if (this.buffer2IsActive) {
+			this.buffer2Ready = false;
+			this.buffer2IsActive = false;
+		}
+		else {
+			this.buffer1Ready = false;
+			this.buffer2IsActive = true;
+		}
+
+		this.index = 0;
+	}
+
+	get isEmpty() {
+		return !this.buffer1Ready && !this.buffer2Ready;
+	}
+
+	get isSaturated() {
+		return this.buffer1Ready && this.buffer2Ready;
+	}
+
 	process(_inputs, outputs, _parameters) {
 		if (this.isEmpty) return true;
 
+		/** @type Float32Array */
 		const buf = this.buffer2IsActive ? this.buffer2 : this.buffer1;
 
 		if (!outputs.length) return;
 
 		// for proof-of-concept, assume mono.
+		/** @type Float32Array */
 		const outputChannel = outputs[0][0];
 
-		// for the real impl, handle differing input and output buffer sizes.
-		// for this POC, we assume that both are always the same (128) length
-		for (let j = 0; j < outputChannel.length; j++)
-			outputChannel[j] = buf[j];
+		// for the real impl, handle uneven input and output buffer sizes.
+		// for this POC, we assume that the input size is always a multiple of 128 (quantum size)
+		for (let i = 0; i < outputChannel.length; i++)
+		{
+			outputChannel[i] = buf[i + (outputChannel.length * this.index)];
+		}
+		this.index++;
 
-		
+		if (this.index >= (buf.length / outputChannel.length))
+			this.flip();
 
 		this.postState();
 

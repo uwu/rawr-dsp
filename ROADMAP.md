@@ -6,7 +6,7 @@ Rawr DSP is a pretty big undertaking, so this should help organization.
 
 Create proof-of-concepts that our core techniques will work.
 
- - [ ] Proof of concept of (seamless) double-buffering source
+ - [x] Proof of concept of (seamless) double-buffering source
  - [ ] Proof of concept of decoding MP3 frame-by-frame
  - [ ] Proof of concept HTTP response streaming into individual MP3 frames
 
@@ -17,7 +17,7 @@ Start building the basics of rawr dsp
 - [ ] Shared tools
   * [ ] Automatic audio context use and resuming
 - [ ] Double buffering source
-- [ ] Sequential decoding of easy OR particularly desirable formats 
+- [ ] Sequential decoding of easy OR particularly desirable formats
   * [ ] WAV
   * [ ] FLAC
   * [ ] QOA (not common but should be useful for testing)

@@ -1,13 +1,57 @@
 <button onclick="ctx.resume()">resume context</button>
 
 <script type="module">
+	// get the double buffer node ready
 	window.ctx = new AudioContext();
 	await ctx.audioWorklet.addModule("double-buffer-worklet.js");
-	const node = new AudioWorkletNode(ctx, "double-buffer", {outputChannelCount: [2]});
-
-	node.port.onmessage = (e) => console.log("main thread", e);
+	const node = new AudioWorkletNode(ctx, "double-buffer", {outputChannelCount: [1]});
 
 	node.connect(ctx.destination);
 
-	node.port.postMessage(new Float32Array(128), new Float32Array(128));
+	// prepare some audio
+	const audioWav = await fetch("kshmr.opus");
+
+	const decodedBuffer = await ctx.decodeAudioData(await audioWav.arrayBuffer());
+
+	const BUFFER_SIZE = 128 * 100; // each buffer contains 100 quanta = 12800 samples ~= 0.3s
+
+	const buffers = [];
+
+	for (let i = 0; i < /*100 * BUFFER_SIZE*/ decodedBuffer.length; i += BUFFER_SIZE) {
+		const buf = new Float32Array(BUFFER_SIZE);
+
+		decodedBuffer.copyFromChannel(buf, 0, i);
+		/*for (let j = 0; j < BUFFER_SIZE; j++)
+			buf[j] = Math.sin((i + j) / 50);*/
+
+		buffers.push(buf);
+	}
+
+	// pipe audio buffers into the doublebuffer
+
+	let lastFilledBuffers = 0;
+	let i = 0;
+	node.port.onmessage = (e) => {
+		// flip happened if filled buffer num < prev filled buffer num
+		const numFilledBufs = e.data[0] + e.data[1];
+		if (lastFilledBuffers > numFilledBufs) {
+			// flip happened, feed in a new buffer
+			node.port.postMessage(buffers[i].buffer, [buffers[i++].buffer]);
+
+			console.log(`the main thread just sent the ${i}th buffer, size ${(BUFFER_SIZE/ctx.sampleRate * 1000).toFixed(3)}ms of audio, to the worklet`);
+		}
+
+		lastFilledBuffers = numFilledBufs;
+	}
+
+	// pipe in the first buffer to kick it off
+	node.port.postMessage(buffers[i].buffer, [buffers[i++].buffer]);
+
+	// temp
+	node.port.postMessage(buffers[i].buffer, [buffers[i++].buffer]);
+
+	console.log("ready");
+
+	//console.log(buffers[0], buffers[1]);
+
 </script>
