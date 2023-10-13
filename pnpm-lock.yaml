@@ -1,0 +1,16 @@
+lockfileVersion: '6.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+dependencies:
+  '@types/audioworklet':
+    specifier: ^0.0.50
+    version: 0.0.50
+
+packages:
+
+  /@types/audioworklet@0.0.50:
+    resolution: {integrity: sha512-Wic6k+tczhJZz4yq2ianEowIF/xH10wI9ac8sBDh27Jvs+WIvXIeM+nWPPRITFwSKuLZKlvVjfLiNmUjfy4koA==}
+    dev: false

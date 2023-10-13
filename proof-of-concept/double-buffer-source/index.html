@@ -1,0 +1,13 @@
+<button onclick="ctx.resume()">resume context</button>
+
+<script type="module">
+	window.ctx = new AudioContext();
+	await ctx.audioWorklet.addModule("double-buffer-worklet.js");
+	const node = new AudioWorkletNode(ctx, "double-buffer", {outputChannelCount: [2]});
+
+	node.port.onmessage = (e) => console.log("main thread", e);
+
+	node.connect(ctx.destination);
+
+	node.port.postMessage(new Float32Array(128), new Float32Array(128));
+</script>
