@@ -1,6 +1,81 @@
 <script type="module">
 	import {onlyMp3Data} from "./test-remove-id3.js";
 
+	// decode full for reference
+	const ctx = new AudioContext();
+	const fullDec = await ctx.decodeAudioData(onlyMp3Data.slice().buffer);
+	console.log("decoded", onlyMp3Data, "into", fullDec, "with left channel content", fullDec.getChannelData(0));
+
+	// split into frames
+	const frames = [];
+
+	let frameStart = 0;
+
+	for (let i = 1; i < onlyMp3Data.length; i++)
+	{
+		if ((onlyMp3Data[i - 1] === 0xFF) && (onlyMp3Data[i] === 0xFB))
+		{
+			if (i !== 1)
+			{
+				//console.log("pushed frame from", frameStart, "until", i-1)
+				frames.push(onlyMp3Data.slice(frameStart, i - 1));
+			}
+
+			frameStart = i - 1;
+		}
+	}
+
+	frames.push(onlyMp3Data.slice(frameStart));
+
+	console.log("frames", frames);
+
+	// decode TWO (or 3 etc) FRAMES AT A TIME
+	const decoded = [];
+	for (let i = 0; i < frames.length;)
+	{
+		let numFramesDecoded = 1;
+		let success = false;
+
+		while (!success) {
+			let len = 0;
+			for (let j = 0; j < numFramesDecoded; j++) len += frames[i + j].length;
+
+			const buf = new Uint8Array(len);
+
+			let written = 0;
+			for (let j = 0; j < numFramesDecoded; j++) {
+				buf.set(frames[i + j], written);
+				written += frames[i + j].length;
+			}
+
+			try {
+				decoded.push(await ctx.decodeAudioData(buf.buffer));
+				success = true;
+				console.log(`decoded ${numFramesDecoded} frames at index ${i}`);
+			} catch {
+				numFramesDecoded++;
+			}
+		}
+
+		i += numFramesDecoded;
+	}
+
+	console.log("decoded", decoded);
+	console.log("left channel contents", decoded.map(b => b.getChannelData(0)))
+
+	/*const BITRATE_INDEX = [
+		-1, // "free", which is only useful for internals of applications, and not transfer of data
+		32_000,40_000,48_000,56_000,64_000,80_000,96_000,112_000,128_000,160_000,192_000,224_000,256_000,320_000,
+		-1 // bad. 0x1111 is not an acceptable index.
+	];
+
+	const SAMPLE_RATE_INDEX = [
+		44100,
+		48000,
+		32000,
+		-1 // 0x11 is reserved
+	];
+
 	// get full decoded file for reference
 	const fullDec = await new AudioContext().decodeAudioData(onlyMp3Data.slice().buffer);
 
@@ -12,25 +87,44 @@
 
 		// eof (or no space for header left in the file)
 		for (let i = 0; i + 3 < onlyMp3Data.length; i++) {
-			if (onlyMp3Data[i] !== 0xFF || onlyMp3Data[i + 1] & 0xF0)
+			if (onlyMp3Data[i] !== 0xFF || !(onlyMp3Data[i + 1] & 0xF0))
 				// not sync byte, continue
 				continue;
 
-			// i  i+1                         i+2                   i+3
-			// FF,F v       ll    e,          bbbb    ff   p   x,   mm   ee       c         o        ee
-			// sync version layer error check bitrate freq pad priv mode mode ext copyright original emphasis
+			// i  i+1                         i+2                         i+3
+			// FF,F v       ll    e,          bbbb    rr         p   x,   mm   ee  c         o        ee
+			// sync version layer error check bitrate samplerate pad priv mode ext copyright original emphasis
 			// onlyMp3Data[i] == FF, the start of this header.
 
+			debugger;
 			const mpegVersion = (onlyMp3Data[i + 1] >> 3) & 0b1; // 1 = MPEG 1, 0 = MPEG 2
-			const audioLayer = (onlyMp3Data[i + 1] >> 2) & 0b11; // 01 = MP3, 10 = MP2, 01 = MP1
+			const audioLayer = (onlyMp3Data[i + 1] >> 1) & 0b11; // 01 = MP3, 10 = MP2, 11 = MP1
+
+			if (mpegVersion !== 1 || audioLayer !== 1)
+				throw new Error("this frame splitter only supports an MPEG 1 Audio Layer III.");
 
 			const hasCRC = onlyMp3Data[i + 1] & 0b1; // 0 = has CRC, 1 = no CRC
+			if (hasCRC === 0)
+				throw new Error("CRC is not supported");
 
-			// we frankly do not care at all about joint stereo mode, copyright, or emphasis.
+			const bitrate = BITRATE_INDEX[onlyMp3Data[i + 2] >> 4];
+
+			const sampleRate = SAMPLE_RATE_INDEX[(onlyMp3Data[i + 2] >> 2) & 0b11];
+
+			const paddingBit = (SAMPLE_RATE_INDEX[i + 2] >> 1) & 0b1;
+			if (paddingBit)
+				throw new Error("padding is not supported");
+
+			// we frankly do not care at all about channel mode, copyright, or emphasis.
 			// ignore the last two bytes.
 
-			// TODO
+			// now we have all the info we need to figure out the frame length
+			// frame length (bytes) = 144 * bitrate / samplerate + padding
+			const frameSize = 10 + (144 * bitrate / sampleRate);
+
+			yield onlyMp3Data.slice(i, i + frameSize);
+			i += (frameSize - 1);
 		}
-	})());
+	})());*/
 
 </script>
