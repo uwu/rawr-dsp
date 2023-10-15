@@ -1,3 +1,5 @@
+// remove the ID3v2.4.0 header
+
 const rawData = new Uint8Array(await (await fetch("kshmr.mp3")).arrayBuffer());
 
 let onlyMp3Data = rawData;

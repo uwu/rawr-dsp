@@ -1,5 +1,6 @@
 <script type="module">
-	import {onlyMp3Data} from "./test-remove-id3.js";
+	//import {onlyMp3Data} from "./test-remove-id3.js";
+	import {xinglessMp3 as onlyMp3Data, xingHeader} from "./test-remove-xing.js";
 
 	// decode full for reference
 	const ctx = new AudioContext();
@@ -29,7 +30,24 @@
 
 	console.log("frames", frames);
 
-	// decode TWO (or 3 etc) FRAMES AT A TIME
+	// decode with xing header
+	const decoded = [];
+	for (let i = 0; i < frames.length; i++){
+		const frame = frames[i];
+
+		const buf = new Uint8Array(frame.length + xingHeader.length);
+		buf.set(xingHeader);
+		buf.set(frame, xingHeader.length);
+
+		try {
+			decoded.push(await ctx.decodeAudioData(buf.buffer));
+			console.log("decoded frame", i)
+		}
+		catch {
+			console.error("failed to decode frame", i, ", moving forward nonetheless")
+		}
+	}
+	/*// decode TWO (or 3 etc) FRAMES AT A TIME
 	const decoded = [];
 	for (let i = 0; i < frames.length;)
 	{
@@ -54,11 +72,12 @@
 				console.log(`decoded ${numFramesDecoded} frames at index ${i}`);
 			} catch {
 				numFramesDecoded++;
+				if ((i + numFramesDecoded) >= frames.length) success = true;
 			}
 		}
 
 		i += numFramesDecoded;
-	}
+	}*/
 
 	console.log("decoded", decoded);
 	console.log("left channel contents", decoded.map(b => b.getChannelData(0)))
