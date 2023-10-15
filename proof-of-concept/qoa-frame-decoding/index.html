@@ -1,0 +1,8 @@
+<script type="module">
+	const rawOpus = await (await fetch("kshmr.opus")).arrayBuffer();
+
+	// test decode
+	const ctx = new AudioContext();
+	console.log(rawOpus)
+	console.log("test decode:", await ctx.decodeAudioData(rawOpus.slice(0)));
+</script>

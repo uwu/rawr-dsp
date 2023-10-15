@@ -30,6 +30,25 @@
 
 	console.log("frames", frames);
 
+	// find frames that decode alone, these likely don't need the bit reservoir.
+	const safeIndexes = [];
+	for (let i = 0; i < frames.length; i++)
+	{
+		const buf = new Uint8Array(frames[i].length + xingHeader.length);
+		buf.set(xingHeader);
+		buf.set(frames[i], xingHeader.length);
+
+		try {
+			await ctx.decodeAudioData(buf.buffer);
+			safeIndexes.push(i);
+			console.log(`${i} is a safe frame`)
+		} catch {
+			console.error(`${i} is not a safe frame`)
+		}
+	}
+
+	console.log("safe indexes", safeIndexes)
+
 	// decode with xing header
 	const decoded = [];
 	for (let i = 0; i < frames.length; i++){
@@ -47,7 +66,7 @@
 			console.error("failed to decode frame", i, ", moving forward nonetheless")
 		}
 	}
-	/*// decode TWO (or 3 etc) FRAMES AT A TIME
+	/*!// decode TWO (or 3 etc) FRAMES AT A TIME
 	const decoded = [];
 	for (let i = 0; i < frames.length;)
 	{
@@ -84,7 +103,20 @@
 
 	/*const BITRATE_INDEX = [
 		-1, // "free", which is only useful for internals of applications, and not transfer of data
-		32_000,40_000,48_000,56_000,64_000,80_000,96_000,112_000,128_000,160_000,192_000,224_000,256_000,320_000,
+		32_000,
+		40_000,
+		48_000,
+		56_000,
+		64_000,
+		80_000,
+		96_000,
+		112_000,
+		128_000,
+		160_000,
+		192_000,
+		224_000,
+		256_000,
+		320_000,
 		-1 // bad. 0x1111 is not an acceptable index.
 	];
 
@@ -96,7 +128,7 @@
 	];
 
 	// get full decoded file for reference
-	const fullDec = await new AudioContext().decodeAudioData(onlyMp3Data.slice().buffer);
+	//const fullDec = await new AudioContext().decodeAudioData(onlyMp3Data.slice().buffer);
 
 	// sources:
 	// https://en.wikipedia.org/wiki/MP3#/media/File:Mp3filestructure.svg
@@ -140,6 +172,11 @@
 			// now we have all the info we need to figure out the frame length
 			// frame length (bytes) = 144 * bitrate / samplerate + padding
 			const frameSize = 10 + (144 * bitrate / sampleRate);
+
+			console.log(frameSize);
+
+			// now we have a frame size (that appears to be inaccurate!!!), move forward until
+			// we hit another 0xFFF_ sync word
 
 			yield onlyMp3Data.slice(i, i + frameSize);
 			i += (frameSize - 1);
