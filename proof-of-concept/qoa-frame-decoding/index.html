@@ -1,8 +1,16 @@
 <script type="module">
-	const rawOpus = await (await fetch("kshmr.opus")).arrayBuffer();
+	import {decodeFormat, decodeFrame} from "./decode-qoa.js";
+
+	const rawQoa = await (await fetch("kshmr.qoa")).arrayBuffer();
 
 	// test decode
 	const ctx = new AudioContext();
-	console.log(rawOpus)
-	console.log("test decode:", await ctx.decodeAudioData(rawOpus.slice(0)));
+	console.log("raw QOA:", new Uint8Array(rawQoa));
+
+	const decodedFormat = decodeFormat(rawQoa);
+	console.log("decoded (still compressed) QOA format", decodedFormat);
+
+	console.log("decoding frame 1...");
+	const decodedFrame1 = decodeFrame(decodedFormat[1][0]);
+	console.log(decodedFrame1);
 </script>

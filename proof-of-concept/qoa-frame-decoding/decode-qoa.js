@@ -35,8 +35,9 @@ export function decodeFormat(data) {
 	for (let i = 0; i < numFrames; i++)
 	{
 		const numChannels = view.getUint8(oset);
-		const sampleRate = view.getUint32(oset, false) & 0x0FFF;
+		const sampleRate = view.getUint32(oset, false) & 0x00FFFFFF;
 		const fSamplesPerChan = view.getUint16(oset + 4, false);
+		// 8 + (16 * chans) + (256 * 8 * chans)
 		const frameSize = view.getUint16(oset + 6, false);
 		oset += 8;
 
@@ -52,7 +53,9 @@ export function decodeFormat(data) {
 		// per channel:
 		// 	256 of:
 		//			qoa slice: 64 bits, 20 samples
-		const encodedAudioData = data.slice(oset, oset + (numChannels * 256 * 64));
+		const readSize = numChannels * 256 * 8;
+		const encodedAudioData = data.slice(oset, oset + readSize);
+		oset += readSize;
 
 		frames.push({
 			numChannels,
@@ -68,14 +71,19 @@ export function decodeFormat(data) {
 	return [totalSamplesPerChannel, frames];
 }
 
-/** @param {QOAFrame} frame
- * @returns {Uint16Array[]} one raw sample array per channel */
+/** @param {QOAFrame} frame */
 export function decodeFrame(frame) {
-	const outputs = Array(frame.numChannels).map(() => new Uint16Array(frame.sampleCount));
+	const outputs = Array(frame.numChannels).fill().map(() => new Int16Array(frame.sampleCount));
+
+	/** @type LMSState */
+	// clone it so we don't mutate the input frame
+	const lmsState = frame.lmsState.map(s => [s[0].slice(), s[1].slice()]);
 
 	for (let si = 0; si < 256 * frame.numChannels; si++)
 	{
 		const slice = new Uint8Array(frame.encodedAudioData.slice(si * 8, (si + 1) * 8));
+		const channelIdx = si % frame.numChannels;
+		const siInChannel = ~~(si / frame.numChannels);
 
 		// ┌─ qoa_slice_t ── 64 bits, 20 samples ────────────/ /────────────┐
 		// |         Byte[0]        |        Byte[1]         \ \  Byte[7]   |
@@ -84,16 +92,62 @@ export function decodeFrame(frame) {
 		// |  sf_quant  │  qr00  │  qr01  │  qr02  │  qr03   / /  │  qr19   |
 		// └────────────┴────────┴────────┴────────┴─────────\ \──┴─────────┘
 
-		const quantizedScaleFactor = slice[0] >> 4;
+		// slow.
+		/*const residuals = new DataView(slice.slice(0, 8).buffer).getBigUint64(0, false);
 
-		let pieces = [];
-		for (let bit = 4; bit < 64; bit + 3)
+		const quantizedResiduals = [];
+		for (let i = 57n; i >= 0; i -= 3n)
+			quantizedResiduals.push(Number((residuals >> i) & 0b111n));*/
+
+		// JS does not support u64, so this is harder than it must be :(
+		// top half, in a u32                  bottom half, in a u32
+		// 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+		// >>> 25 22  19 16  13 10 7   4  1  |   27 24  21 18 15  12 9  6   3  0
+		//                                   \ (<< 2 & 0b100) | (>> 30)
+
+		const quantizedScaleFactor = slice[0] >> 4;
+		const dequantizedScaleFactor = Math.round(Math.pow(quantizedScaleFactor + 1, 2.75));
+		const dv = new DataView(slice.slice(0, 8).buffer);
+		const residuals1 = dv.getUint32(0, false);
+		const residuals2 = dv.getUint32(4, false);
+
+		const quantizedResiduals = [];
+		for (let i = 25; i >= 1; i -= 3)
+			quantizedResiduals.push((residuals1 >>> i) & 0b111);
+
+		quantizedResiduals.push(((residuals1 << 2) & 0b100) | (residuals2 >> 30));
+
+		for (let i = 27; i >= 0; i -= 3)
+			quantizedResiduals.push((residuals2 >>> i) & 0b111);
+
+		const dequantizedScaledResiduals = quantizedResiduals.map(qr => {
+			const r = dequantizedScaleFactor * [0.75, -0.75, 2.5, -2.5, 4.5, -4.5, 7, -7][qr];
+			return r < 0 ? Math.ceil(r - 0.5) : Math.floor(r + 0.5);
+		});
+
+		for (let i = 0; i < dequantizedScaledResiduals.length; i++)
 		{
-			let byteNum = ~~(bit / 8);
-			let bitNum = bit % 8;
-			// doesn't handle reading across byte boundaries yet :(
-			// TODO
-			pieces.push()
+			let predicted = 0;
+			for (let j = 0 ; j < 4; j++)
+				predicted += lmsState[channelIdx][0][j] * lmsState[channelIdx][1][j];
+
+			predicted >>= 13;
+
+			//debugger;
+			const sample = Math.max(-32768, Math.min(predicted + dequantizedScaledResiduals[i], 32767));
+			outputs[channelIdx][i + (siInChannel * 20)] = sample;
+
+			// update LMS state
+
+			const weightDelta = dequantizedScaledResiduals[i] >> 4;
+			for (let j = 0; j < 4; j++)
+				lmsState[channelIdx][1][j] += (lmsState[channelIdx][0][j] < 0) ? -weightDelta : weightDelta;
+
+			lmsState[channelIdx][0].shift();
+			lmsState[channelIdx][0].push(sample);
 		}
+
 	}
+
+	return outputs;
 }
