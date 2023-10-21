@@ -1,186 +1,81 @@
 <script type="module">
-	//import {onlyMp3Data} from "./test-remove-id3.js";
-	import {xinglessMp3 as onlyMp3Data, xingHeader} from "./test-remove-xing.js";
+
+	//import { MPEGDecoder } from "https://esm.sh/mpg123-decoder";
+	import CodecParser from "https://esm.sh/codec-parser";
+
+	const onlyMp3Data = new Uint8Array(await (await fetch("kshmr.mp3")).arrayBuffer());
 
 	// decode full for reference
 	const ctx = new AudioContext();
 	const fullDec = await ctx.decodeAudioData(onlyMp3Data.slice().buffer);
 	console.log("decoded", onlyMp3Data, "into", fullDec, "with left channel content", fullDec.getChannelData(0));
 
-	// split into frames
+	// split into little chunks, as if it came over the network
+	const slices = [];
+	for (let i = 0; i < onlyMp3Data.length; i += 4096)
+	{
+		slices.push(onlyMp3Data.slice(i, i + 4096));
+	}
+
+	console.log("split into chunks of 4096 bytes :)", slices);
+
+	const parser = new CodecParser("audio/mpeg", {
+		enableLogging: true
+	});
+
 	const frames = [];
-
-	let frameStart = 0;
-
-	for (let i = 1; i < onlyMp3Data.length; i++)
+	for (const slice of slices)
 	{
-		if ((onlyMp3Data[i - 1] === 0xFF) && (onlyMp3Data[i] === 0xFB))
+		const f = [...parser.parseChunk(slice)];
+		if (f.length) console.log(`got ${f.length} frames!`);
+		frames.push(f)
+	}
+
+	console.log("parsed frames: ", frames);
+
+	const buffers = [];
+	for (const chunk of frames)
+	{
+		// chunk of a few frames together
+		// assume that codec-parser groups the frames such that each chunk is parseable alone
+		const buf = new Uint8Array(chunk.map(f => f.data.length).reduce((a, b) => a + b));
+		let seek = 0;
+		for (const b of chunk)
 		{
-			if (i !== 1)
-			{
-				//console.log("pushed frame from", frameStart, "until", i-1)
-				frames.push(onlyMp3Data.slice(frameStart, i - 1));
-			}
-
-			frameStart = i - 1;
+			buf.set(b.data, seek);
+			seek += b.data.length;
 		}
+
+		buffers.push(await ctx.decodeAudioData(buf.buffer));
 	}
 
-	frames.push(onlyMp3Data.slice(frameStart));
+	console.log("decoded each chunk: ", buffers);
 
-	console.log("frames", frames);
+	console.log("left channel:", buffers.map(b => b.getChannelData(0)));
 
-	// find frames that decode alone, these likely don't need the bit reservoir.
-	const safeIndexes = [];
-	for (let i = 0; i < frames.length; i++)
+	console.log("YOU MUST CLICK THE PAGE NOW to allow the audio context to start.");
+
+	await new Promise(res => window.onclick = res);
+
+	const bigBuffer = new AudioBuffer({
+		length: buffers.map(b => b.length).reduce((a, b) => a + b),
+		sampleRate: buffers[0].sampleRate,
+		numberOfChannels: buffers[0].numberOfChannels
+	});
+
+	let seek = 0;
+	for (const buf of buffers)
 	{
-		const buf = new Uint8Array(frames[i].length + xingHeader.length);
-		buf.set(xingHeader);
-		buf.set(frames[i], xingHeader.length);
-
-		try {
-			await ctx.decodeAudioData(buf.buffer);
-			safeIndexes.push(i);
-			console.log(`${i} is a safe frame`)
-		} catch {
-			console.error(`${i} is not a safe frame`)
-		}
+		for (let i = 0; i < buf.numberOfChannels; i++)
+			bigBuffer.copyToChannel(buf.getChannelData(i), i, seek);
+		seek += buf.length;
 	}
 
-	console.log("safe indexes", safeIndexes)
+	const source = ctx.createBufferSource();
+	source.buffer = bigBuffer;
+	source.connect(ctx.destination);
+	source.start();
 
-	// decode with xing header
-	const decoded = [];
-	for (let i = 0; i < frames.length; i++){
-		const frame = frames[i];
-
-		const buf = new Uint8Array(frame.length + xingHeader.length);
-		buf.set(xingHeader);
-		buf.set(frame, xingHeader.length);
-
-		try {
-			decoded.push(await ctx.decodeAudioData(buf.buffer));
-			console.log("decoded frame", i)
-		}
-		catch {
-			console.error("failed to decode frame", i, ", moving forward nonetheless")
-		}
-	}
-	/*!// decode TWO (or 3 etc) FRAMES AT A TIME
-	const decoded = [];
-	for (let i = 0; i < frames.length;)
-	{
-		let numFramesDecoded = 1;
-		let success = false;
-
-		while (!success) {
-			let len = 0;
-			for (let j = 0; j < numFramesDecoded; j++) len += frames[i + j].length;
-
-			const buf = new Uint8Array(len);
-
-			let written = 0;
-			for (let j = 0; j < numFramesDecoded; j++) {
-				buf.set(frames[i + j], written);
-				written += frames[i + j].length;
-			}
-
-			try {
-				decoded.push(await ctx.decodeAudioData(buf.buffer));
-				success = true;
-				console.log(`decoded ${numFramesDecoded} frames at index ${i}`);
-			} catch {
-				numFramesDecoded++;
-				if ((i + numFramesDecoded) >= frames.length) success = true;
-			}
-		}
-
-		i += numFramesDecoded;
-	}*/
-
-	console.log("decoded", decoded);
-	console.log("left channel contents", decoded.map(b => b.getChannelData(0)))
-
-	/*const BITRATE_INDEX = [
-		-1, // "free", which is only useful for internals of applications, and not transfer of data
-		32_000,
-		40_000,
-		48_000,
-		56_000,
-		64_000,
-		80_000,
-		96_000,
-		112_000,
-		128_000,
-		160_000,
-		192_000,
-		224_000,
-		256_000,
-		320_000,
-		-1 // bad. 0x1111 is not an acceptable index.
-	];
-
-	const SAMPLE_RATE_INDEX = [
-		44100,
-		48000,
-		32000,
-		-1 // 0x11 is reserved
-	];
-
-	// get full decoded file for reference
-	//const fullDec = await new AudioContext().decodeAudioData(onlyMp3Data.slice().buffer);
-
-	// sources:
-	// https://en.wikipedia.org/wiki/MP3#/media/File:Mp3filestructure.svg
-	// https://www.datavoyage.com/mpgscript/mpeghdr.htm
-
-	const frames = Array.from((function* mp3Frames() {
-
-		// eof (or no space for header left in the file)
-		for (let i = 0; i + 3 < onlyMp3Data.length; i++) {
-			if (onlyMp3Data[i] !== 0xFF || !(onlyMp3Data[i + 1] & 0xF0))
-				// not sync byte, continue
-				continue;
-
-			// i  i+1                         i+2                         i+3
-			// FF,F v       ll    e,          bbbb    rr         p   x,   mm   ee  c         o        ee
-			// sync version layer error check bitrate samplerate pad priv mode ext copyright original emphasis
-			// onlyMp3Data[i] == FF, the start of this header.
-
-			debugger;
-			const mpegVersion = (onlyMp3Data[i + 1] >> 3) & 0b1; // 1 = MPEG 1, 0 = MPEG 2
-			const audioLayer = (onlyMp3Data[i + 1] >> 1) & 0b11; // 01 = MP3, 10 = MP2, 11 = MP1
-
-			if (mpegVersion !== 1 || audioLayer !== 1)
-				throw new Error("this frame splitter only supports an MPEG 1 Audio Layer III.");
-
-			const hasCRC = onlyMp3Data[i + 1] & 0b1; // 0 = has CRC, 1 = no CRC
-			if (hasCRC === 0)
-				throw new Error("CRC is not supported");
-
-			const bitrate = BITRATE_INDEX[onlyMp3Data[i + 2] >> 4];
-
-			const sampleRate = SAMPLE_RATE_INDEX[(onlyMp3Data[i + 2] >> 2) & 0b11];
-
-			const paddingBit = (SAMPLE_RATE_INDEX[i + 2] >> 1) & 0b1;
-			if (paddingBit)
-				throw new Error("padding is not supported");
-
-			// we frankly do not care at all about channel mode, copyright, or emphasis.
-			// ignore the last two bytes.
-
-			// now we have all the info we need to figure out the frame length
-			// frame length (bytes) = 144 * bitrate / samplerate + padding
-			const frameSize = 10 + (144 * bitrate / sampleRate);
-
-			console.log(frameSize);
-
-			// now we have a frame size (that appears to be inaccurate!!!), move forward until
-			// we hit another 0xFFF_ sync word
-
-			yield onlyMp3Data.slice(i, i + frameSize);
-			i += (frameSize - 1);
-		}
-	})());*/
+	console.log("//TODO: fix the leading zeroes in this.");
 
 </script>
