@@ -33,38 +33,145 @@
 
 	console.log("parsed frames: ", frames);
 
-	const buffers = [];
-	for (const chunk of frames)
+	function joinBufs(bufs)
 	{
-		// chunk of a few frames together
-		// assume that codec-parser groups the frames such that each chunk is parseable alone
-		const buf = new Uint8Array(chunk.map(f => f.data.length).reduce((a, b) => a + b));
+		const target = new Uint8Array(bufs.map(b => b.length).reduce((a, b) => a + b));
 		let seek = 0;
-		for (const b of chunk)
+		for (const b of bufs)
 		{
-			buf.set(b.data, seek);
-			seek += b.data.length;
+			target.set(b, seek);
+			seek += b.length;
 		}
-
-		buffers.push(await ctx.decodeAudioData(buf.buffer));
+		return target.buffer;
 	}
 
-	console.log("decoded each chunk: ", buffers);
+	const chunkPairPCM = [];
 
-	console.log("left channel:", buffers.map(b => b.getChannelData(0)));
+	// each chunk is a parseable set of frames
+	// decode each *pair* of chunks so that we can correlate them and fix the missing parts
+	for (let i = 0; i < frames.length; i++) {
+		const chunk = (i + 1) === frames.length ? frames[i] : [...frames[i], ...frames[i + 1]];
+		chunkPairPCM.push(await ctx.decodeAudioData(joinBufs(chunk.map(f => f.data))));
+	}
+	// each chunk will have a load of zeroes at the start when decoded to PCM,
+	// so we have to decode more than one chunk at once, and overlap them.
+	// decode two at a time like this
+	// MP3 frames   0+1 1+2 2+3 3+4 5+6
+	// gives us PCM 0,1  2   3   4  5,6
+
+	// only do 20, not 98, because we dont have all day
+	chunkPairPCM.splice(20, 9999999999);
+
+	console.log("decoded each chunk *pair*: ", chunkPairPCM);
+
+	console.log("left channel:", chunkPairPCM.map(b => b.getChannelData(0)));
+
+	function sum(arr)
+	{
+		// after much much testing (see sum-array.png) for details
+		// this is the fastest way to sum a Float32Array, in general, ish
+		let sum = 0;
+		for (let i = arr.length; i >= 0; i--) sum += arr[i];
+		return sum;
+	}
+
+	// optimize this for the real impl
+	function pearsonCoeffSquared(a, b)
+	{
+		if (a.length !== b.length) throw new Error("Can only take PCC of equally sized arrays");
+
+		let sumA = 0, sumB = 0, sumASq = 0, sumBSq = 0, sumProd = 0;
+
+		for (let i = a.length - 1; i >=0; i--)
+		{
+			const va = a[i];
+			const vb = b[i];
+
+			sumA += va;
+			sumB += vb;
+			sumASq += va * va;
+			sumBSq += vb * vb;
+			sumProd += va * vb;
+		}
+
+		const meanA = sumA / a.length;
+		const meanB = sumB / a.length;
+
+		// i tried, you cant cancel out those repeated len * meana * meanb terms
+		const numerator = sumProd - a.length * meanA * meanB;
+		const denom1 = sumASq - a.length * meanA * meanA;
+		const denom2 = sumBSq - a.length * meanB * meanB;
+
+		return (numerator * numerator) / (denom1 * denom2);
+	}
+
+	// first one is fine, just put it straight in
+	const chunkPCM = [chunkPairPCM[0]];
+
+	debugger;
+	let lastChunkL = chunkPairPCM[0].getChannelData(0);
+	// find the alignment of each pair, then slice out after the last chunk ended
+	for (let i = 1; i < chunkPairPCM.length; i++)
+	{
+		const start = performance.now();
+		const thisChunkL = chunkPairPCM[i].getChannelData(0);
+
+		let maxPCC = 0;
+		let maxIdx = 0;
+		for (let i = 0; i < lastChunkL.length; i++)
+		{
+			const thisChunk = new Float32Array(lastChunkL.length);
+			thisChunk.set(thisChunkL.slice(0, thisChunk.length - i), i);
+			const sqPCC = pearsonCoeffSquared(lastChunkL, thisChunk);
+
+			if (sqPCC > maxPCC) {
+				maxPCC = sqPCC;
+				maxIdx = i;
+			}
+		}
+
+		console.log("tested", lastChunkL.length,
+			"alignments between chunks: ",
+			i - 1, i,
+			" and found the best correlation of",
+			Math.sqrt(maxPCC),
+			"at sample",
+			maxIdx,
+			"and took",
+			performance.now() - start,
+			"ms"
+		);
+
+		const pcmLen = lastChunkL.length - maxIdx;
+		console.log(`We use this chunk from sample ${pcmLen} onwards.`)
+		//chunkPCM.push(thisChunkL.slice(pcmLen));
+		lastChunkL = thisChunkL;
+
+		const newChunk = new AudioBuffer({
+			length: thisChunkL.length - pcmLen,
+			sampleRate: chunkPairPCM[0].sampleRate,
+			numberOfChannels: chunkPairPCM[0].numberOfChannels
+		});
+		for (let c = 0; c < newChunk.numberOfChannels; c++)
+			newChunk.copyToChannel(chunkPairPCM[i].getChannelData(c).slice(pcmLen), c);
+
+		chunkPCM.push(newChunk);
+	}
+
+	console.log("pcm chunks:", chunkPCM)
 
 	console.log("YOU MUST CLICK THE PAGE NOW to allow the audio context to start.");
 
 	await new Promise(res => window.onclick = res);
 
 	const bigBuffer = new AudioBuffer({
-		length: buffers.map(b => b.length).reduce((a, b) => a + b),
-		sampleRate: buffers[0].sampleRate,
-		numberOfChannels: buffers[0].numberOfChannels
+		length: chunkPCM.map(b => b.length).reduce((a, b) => a + b),
+		sampleRate: chunkPCM[0].sampleRate,
+		numberOfChannels: chunkPCM[0].numberOfChannels
 	});
 
 	let seek = 0;
-	for (const buf of buffers)
+	for (const buf of chunkPCM)
 	{
 		for (let i = 0; i < buf.numberOfChannels; i++)
 			bigBuffer.copyToChannel(buf.getChannelData(i), i, seek);
@@ -75,7 +182,5 @@
 	source.buffer = bigBuffer;
 	source.connect(ctx.destination);
 	source.start();
-
-	console.log("//TODO: fix the leading zeroes in this.");
 
 </script>
