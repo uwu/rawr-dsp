@@ -60,7 +60,7 @@
 	// gives us PCM 0,1  2   3   4  5,6
 
 	// only do 20, not 98, because we dont have all day
-	chunkPairPCM.splice(20, 9999999999);
+	//chunkPairPCM.splice(20, 9999999999);
 
 	console.log("decoded each chunk *pair*: ", chunkPairPCM);
 
@@ -108,45 +108,91 @@
 	// first one is fine, just put it straight in
 	const chunkPCM = [chunkPairPCM[0]];
 
+	const WINDOW_SIZE = 128;
+	const ALIGNMENT_HISTORY_SIZE = Infinity; // lol
+
 	debugger;
 	let lastChunkL = chunkPairPCM[0].getChannelData(0);
+	let lastAlignments = []; // try the past few alignments first as an optimization
 	// find the alignment of each pair, then slice out after the last chunk ended
 	for (let i = 1; i < chunkPairPCM.length; i++)
 	{
 		const start = performance.now();
 		const thisChunkL = chunkPairPCM[i].getChannelData(0);
 
-		let maxPCC = 0;
-		let maxIdx = 0;
-		for (let i = 0; i < lastChunkL.length; i++)
-		{
+		function testAlignment(i) {
 			const thisChunk = new Float32Array(lastChunkL.length);
 			thisChunk.set(thisChunkL.slice(0, thisChunk.length - i), i);
-			const sqPCC = pearsonCoeffSquared(lastChunkL, thisChunk);
 
-			if (sqPCC > maxPCC) {
-				maxPCC = sqPCC;
-				maxIdx = i;
+			let works = true;
+			for (let j = WINDOW_SIZE; j >= 0; j--)
+			{
+				if (thisChunk[thisChunk.length - j] !== lastChunkL[lastChunkL.length - j])
+				{
+					works = false;
+					break;
+				}
 			}
+
+			return works;
 		}
+
+		let maxIdx = 0;
+
+		for (let i = lastAlignments.length - 1; i >= 0; i--)
+			if (testAlignment(lastAlignments[i])) {
+				maxIdx = lastAlignments[i];
+				break;
+			}
+
+		if (maxIdx === 0)
+			// start at the middle and work our way out
+			for (
+				let i = ~~(lastChunkL.length / 2), step = 1;
+				i < lastChunkL.length && i >= 0;
+				(step *= -1, step += (step < 1 ? -1 : 1), i += step)
+			)
+				if (testAlignment(i)) {
+					maxIdx = i;
+					break;
+				}
+
+		const maybeIdx = lastAlignments.indexOf(maxIdx);
+		if (maybeIdx === -1)
+		{
+			if (lastAlignments.length >= ALIGNMENT_HISTORY_SIZE)
+				lastAlignments.shift();
+		}
+		else {
+			lastAlignments.splice(maybeIdx, 1);
+		}
+
+		lastAlignments.push(maxIdx)
 
 		console.log("tested", lastChunkL.length,
 			"alignments between chunks: ",
 			i - 1, i,
-			" and found the best correlation of",
+			//"and found that the following indexes work:",
+			//idxesThatWork,
+			"found index",
+			maxIdx
+			/*" and found the best correlation of",
 			Math.sqrt(maxPCC),
 			"at sample",
-			maxIdx,
+			maxIdx*/,
 			"and took",
 			performance.now() - start,
 			"ms"
 		);
+
+		//let maxIdx = idxesThatWork[0];
 
 		const pcmLen = lastChunkL.length - maxIdx;
 		console.log(`We use this chunk from sample ${pcmLen} onwards.`)
 		//chunkPCM.push(thisChunkL.slice(pcmLen));
 		lastChunkL = thisChunkL;
 
+		// TODO: this tries to construct a 0-length buffer for the last chunk. fix it.
 		const newChunk = new AudioBuffer({
 			length: thisChunkL.length - pcmLen,
 			sampleRate: chunkPairPCM[0].sampleRate,
