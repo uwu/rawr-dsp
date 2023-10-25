@@ -1,0 +1,77 @@
+<script type="module">
+
+	import CodecParser from "https://esm.sh/codec-parser";
+
+	// getting opus to work with the built in decoder is pain
+	// and no support on safari
+	// so we'll use this
+	import { OpusDecoder } from "https://esm.sh/opus-decoder"
+
+	const opusData = new Uint8Array(await (await fetch("kshmr.opus")).arrayBuffer());
+
+	// decode full for reference
+	const ctx = new AudioContext();
+	const fullDec = await ctx.decodeAudioData(opusData.slice().buffer);
+	console.log("decoded", opusData, "into", fullDec, "with left channel content", fullDec.getChannelData(0));
+
+	// split into little chunks, as if it came over the network
+	const slices = [];
+	for (let i = 0; i < opusData.length; i += 4096)
+	{
+		slices.push(opusData.slice(i, i + 4096));
+	}
+
+	console.log("split into chunks of 4096 bytes :)", slices);
+
+	const parser = new CodecParser("audio/ogg", {
+		enableLogging: true
+	});
+
+	const pages = [];
+	for (const slice of slices)
+	{
+		const f = [...parser.parseChunk(slice)];
+		// i think flattening this is ok?
+		pages.push(...f);
+	}
+
+	console.log("parsed pages: ", pages);
+
+	const decoder = new OpusDecoder();
+	await decoder.ready;
+
+	const pcm = [];
+	for (const page of pages)
+		for (const frame of page.codecFrames) {
+			const {channelData, samplesDecoded} = decoder.decodeFrame(frame.data);
+			console.log(`got ${samplesDecoded} samples this frame!`);
+			pcm.push(channelData);
+		}
+
+	console.log("pcm:", pcm);
+
+	const length = pcm.map(c => c[0].length).reduce((a, b) => a + b);
+	const buf = new AudioBuffer({
+		length,
+		sampleRate: pages.find(p => p.codecFrames[0]).codecFrames[0].header.sampleRate,
+		numberOfChannels: pcm[0].length
+	});
+
+	for (let chI = 0; chI < pcm[0].length; chI++)
+		for (let frI = 0, bytes = 0; bytes < buf.length; frI++) {
+			const chunk = pcm[frI][chI];
+			buf.copyToChannel(chunk, chI, bytes);
+			bytes += chunk.length;
+		}
+
+	console.log("left channel buffer:", buf.getChannelData(0));
+
+	console.log("click the page :)");
+	await new Promise(r => window.onclick = r);
+	await ctx.resume();
+
+	const src = ctx.createBufferSource();
+	src.buffer = buf;
+	src.connect(ctx.destination);
+	src.start();
+</script>
