@@ -59,51 +59,9 @@
 	// MP3 frames   0+1 1+2 2+3 3+4 5+6
 	// gives us PCM 0,1  2   3   4  5,6
 
-	// only do 20, not 98, because we dont have all day
-	//chunkPairPCM.splice(20, 9999999999);
-
 	console.log("decoded each chunk *pair*: ", chunkPairPCM);
 
 	console.log("left channel:", chunkPairPCM.map(b => b.getChannelData(0)));
-
-	function sum(arr)
-	{
-		// after much much testing (see sum-array.png) for details
-		// this is the fastest way to sum a Float32Array, in general, ish
-		let sum = 0;
-		for (let i = arr.length; i >= 0; i--) sum += arr[i];
-		return sum;
-	}
-
-	// optimize this for the real impl
-	function pearsonCoeffSquared(a, b)
-	{
-		if (a.length !== b.length) throw new Error("Can only take PCC of equally sized arrays");
-
-		let sumA = 0, sumB = 0, sumASq = 0, sumBSq = 0, sumProd = 0;
-
-		for (let i = a.length - 1; i >=0; i--)
-		{
-			const va = a[i];
-			const vb = b[i];
-
-			sumA += va;
-			sumB += vb;
-			sumASq += va * va;
-			sumBSq += vb * vb;
-			sumProd += va * vb;
-		}
-
-		const meanA = sumA / a.length;
-		const meanB = sumB / a.length;
-
-		// i tried, you cant cancel out those repeated len * meana * meanb terms
-		const numerator = sumProd - a.length * meanA * meanB;
-		const denom1 = sumASq - a.length * meanA * meanA;
-		const denom2 = sumBSq - a.length * meanB * meanB;
-
-		return (numerator * numerator) / (denom1 * denom2);
-	}
 
 	// first one is fine, just put it straight in
 	const chunkPCM = [chunkPairPCM[0]];
@@ -115,7 +73,10 @@
 	let lastChunkL = chunkPairPCM[0].getChannelData(0);
 	let lastAlignments = []; // try the past few alignments first as an optimization
 	// find the alignment of each pair, then slice out after the last chunk ended
-	for (let i = 1; i < chunkPairPCM.length; i++)
+
+	// the last chunk will fit entirely within the second-to-last and produce a buffer of 0 length
+	// so skip it.
+	for (let i = 1; i < chunkPairPCM.length - 1; i++)
 	{
 		const start = performance.now();
 		const thisChunkL = chunkPairPCM[i].getChannelData(0);
@@ -201,7 +162,6 @@
 		//chunkPCM.push(thisChunkL.slice(pcmLen));
 		lastChunkL = thisChunkL;
 
-		// TODO: this tries to construct a 0-length buffer for the last chunk. fix it.
 		const newChunk = new AudioBuffer({
 			length: thisChunkL.length - pcmLen,
 			sampleRate: chunkPairPCM[0].sampleRate,

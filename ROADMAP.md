@@ -10,9 +10,9 @@ Create proof-of-concepts that our core techniques will work.
 	* [x] Chrome
    * [x] Firefox
    * [x] Safari
- - [ ] Proof of concept of decoding MP3 frame-by-frame
-	 * [ ] Chrome
-	 * [ ] Firefox
+ - [x] Proof of concept of decoding MP3 frame-by-frame
+	 * [x] Chrome
+	 * [x] Firefox
 	 * [ ] Safari
  - [x] Proof of concept HTTP response streaming into individual MP3 frames
 	* [x] Chrome
