@@ -18,10 +18,10 @@ Create proof-of-concepts that our core techniques will work.
 	* [x] Chrome
 	* [x] Firefox
 	* [x] Safari
- - [ ] Proof of concept of decoding Opus frame-by-frame
-	 * [ ] Chrome
-	 * [ ] Firefox
-	 * [ ] Safari
+ - [x] Proof of concept of decoding Opus frame-by-frame
+	 * [x] Chrome
+	 * [x] Firefox
+	 * [x] Safari
 
 ## Stage 1: Implement the basics
 
