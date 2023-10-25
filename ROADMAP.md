@@ -1,4 +1,4 @@
-# Rawr DSP roadmad
+# Rawr DSP roadmap
 
 Rawr DSP is a pretty big undertaking, so this should help organization.
 
@@ -7,8 +7,21 @@ Rawr DSP is a pretty big undertaking, so this should help organization.
 Create proof-of-concepts that our core techniques will work.
 
  - [x] Proof of concept of (seamless) double-buffering source
+	* [x] Chrome
+   * [x] Firefox
+   * [x] Safari
  - [ ] Proof of concept of decoding MP3 frame-by-frame
- - [ ] Proof of concept HTTP response streaming into individual MP3 frames
+	 * [ ] Chrome
+	 * [ ] Firefox
+	 * [ ] Safari
+ - [x] Proof of concept HTTP response streaming into individual MP3 frames
+	* [x] Chrome
+	* [x] Firefox
+	* [x] Safari
+ - [ ] Proof of concept of decoding Opus frame-by-frame
+	 * [ ] Chrome
+	 * [ ] Firefox
+	 * [ ] Safari
 
 ## Stage 1: Implement the basics
 

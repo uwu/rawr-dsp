@@ -125,9 +125,14 @@
 			thisChunk.set(thisChunkL.slice(0, thisChunk.length - i), i);
 
 			let works = true;
-			for (let j = WINDOW_SIZE; j >= 0; j--)
+			for (let j = 1; j <= WINDOW_SIZE; j++)
 			{
-				if (thisChunk[thisChunk.length - j] !== lastChunkL[lastChunkL.length - j])
+				// we need a tolerance because while chrome will be outputting identical results
+				// well before the last 128 samples, firefox and webkit don't
+				// this tolerance doesnt work for webkit because the samples differ by as much as
+				// 0.14 which just makes alignment impossible. on FF its about 0.00003 so we're cool
+				//if (thisChunk[thisChunk.length - j] !== lastChunkL[lastChunkL.length - j])
+				if (Math.abs(thisChunk[thisChunk.length - j] - lastChunkL[lastChunkL.length - j]) > 0.00004)
 				{
 					works = false;
 					break;
@@ -145,17 +150,21 @@
 				break;
 			}
 
-		if (maxIdx === 0)
+		if (maxIdx === 0) {
 			// start at the middle and work our way out
 			for (
 				let i = ~~(lastChunkL.length / 2), step = 1;
 				i < lastChunkL.length && i >= 0;
-				(step *= -1, step += (step < 1 ? -1 : 1), i += step)
+				(i += step, step *= -1, step += (step < 1 ? -1 : 1))
 			)
 				if (testAlignment(i)) {
 					maxIdx = i;
 					break;
 				}
+
+			if (maxIdx === 0)
+				console.error("oh no, none of the alignments were a match")
+		}
 
 		const maybeIdx = lastAlignments.indexOf(maxIdx);
 		if (maybeIdx === -1)
