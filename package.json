@@ -6,8 +6,15 @@
   "license": "BSD-3-Clause",
   "main": "dist/index.js",
   "module": "dist/index.js",
-  "scripts": {},
+  "scripts": {
+    "build": "tsc && node process-worklets.mjs"
+  },
   "dependencies": {
-    "@types/audioworklet": "^0.0.50"
+    "codec-parser": "^2.4.3",
+    "opus-decoder": "^0.7.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.19.5",
+    "typescript": "^5.2.2"
   }
 }

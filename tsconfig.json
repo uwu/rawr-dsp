@@ -1,10 +1,12 @@
 {
-	"include": ["src/*.ts"],
+	"include": ["src/**/*.ts"],
 	"compilerOptions": {
 		"target": "ESNext",
+		"lib": ["ESNext", "DOM"],
 		"moduleResolution": "node",
 		"isolatedModules": true,
 		"declaration": true,
-		"outDir": "dist"
+		"outDir": "dist",
+		"strict": true
 	}
 }
