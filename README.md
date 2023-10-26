@@ -74,3 +74,20 @@ Web Audio API instead.
 
 What this functionality is for is when you need to continuously feed data from the main thread into a Worklet,
 for example, the streaming functionality of Rawr DSP uses this under the hood.
+
+## API structure & conventions
+
+There are three kinds of API in Rawr:
+ - `core`: APIs that are very basic and upon which the other functionality is built. Expect no consistency.
+ - `modular`: Very consistent pick-and-choose pieces to put together to build your audio workflow.
+ - name TBA: easy-to-use things that are the JS audio api I wish we had, and should just work:tm:.
+
+Some common conventions for `modular`:
+ - Use of `RMStream<TC, T1, T2>` everywhere
+ - Bring your own audio context, or don't, we'll provide one
+ - No automatic connections
+ - No need to manually register worklets and stuff
+
+Some common conventions for the high level API:
+ - Audio context as with modular
+ - Everything connects to everything else automatically

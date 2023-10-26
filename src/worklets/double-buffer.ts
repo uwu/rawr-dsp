@@ -1,7 +1,7 @@
 registerProcessor("double-buffer", class extends AudioWorkletProcessor {
 
-	#buffer1: Float32Array;
-	#buffer2: Float32Array;
+	#buffer1: Float32Array[];
+	#buffer2: Float32Array[];
 
 	#buffer2IsActive: boolean;
 
@@ -13,8 +13,8 @@ registerProcessor("double-buffer", class extends AudioWorkletProcessor {
 	constructor() {
 		super();
 
-		this.#buffer1 = new Float32Array(0);
-		this.#buffer2 = new Float32Array(0);
+		this.#buffer1 = [];
+		this.#buffer2 = [];
 		this.#buffer1Ready = this.#buffer2Ready = this.#buffer2IsActive = false;
 		this.#index = 0;
 
@@ -25,10 +25,10 @@ registerProcessor("double-buffer", class extends AudioWorkletProcessor {
 			// new buffer sent to us!
 			// write it to the inactive buffer
 			if (this.#buffer2IsActive) {
-				this.#buffer1 = new Float32Array(e.data);
+				this.#buffer1 = e.data;
 				this.#buffer1Ready = true;
 			} else {
-				this.#buffer2 = new Float32Array(e.data);
+				this.#buffer2 = e.data;
 				this.#buffer2Ready = true;
 			}
 
@@ -62,30 +62,39 @@ registerProcessor("double-buffer", class extends AudioWorkletProcessor {
 		return this.#buffer1Ready && this.#buffer2Ready;
 	}
 
+	get #activeBuffer() {
+		return this.#buffer2IsActive ? this.#buffer2 : this.#buffer1;
+	}
+
 	process(_inputs: Float32Array[][], outputs: Float32Array[][], _parameters: Record<string, Float32Array>) {
 		if (this.#isEmpty) return true;
 
-		const buf = this.#buffer2IsActive ? this.#buffer2 : this.#buffer1;
-
 		if (!outputs.length) return true;
 
-		// TODO rewrite.
+		if (!this.#activeBuffer.length) return true;
 
-		// for proof-of-concept, assume mono.
-		const outputChannel = outputs[0][0];
+		for (let i = 0; i < Math.min(outputs[0].length, this.#activeBuffer.length); i++) {
+			const outputChannel = outputs[0][i];
+			const toSet = this.#activeBuffer[i].slice(this.#index);
 
-		// for the real impl, handle uneven input and output buffer sizes.
-		// for this POC, we assume that the input size is always a multiple of 128 (quantum size)
-		for (let i = 0; i < outputChannel.length; i++)
-		{
-			outputChannel[i] = buf[i + (outputChannel.length * this.#index)];
+			outputChannel.set(toSet);
+
+			if (i === 0) this.#index += toSet.length;
+
+			if (toSet.length < outputChannel.length)
+			{
+				this.#flip();
+				const remaining = outputChannel.length - toSet.length;
+
+				outputChannel.set(this.#activeBuffer[i].slice(0, remaining), toSet.length);
+
+				if (i === 0) this.#index = remaining;
+			}
 		}
-		this.#index++;
 
-		if (this.#index >= (buf.length / outputChannel.length))
+		if (this.#index >= this.#activeBuffer[0].length)
 			this.#flip();
 
-		// in the real impl, have a way to close this and a way to pause etc
 		return true;
 	}
 });

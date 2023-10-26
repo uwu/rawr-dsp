@@ -1,13 +1,13 @@
 <script type="module">
 
-	import CodecParser from "https://esm.sh/codec-parser";
+    import CodecParser from "https://esm.sh/codec-parser";
 
-	// getting opus to work with the built in decoder is pain
-	// and no support on safari
-	// so we'll use this
-	import { OpusDecoder } from "https://esm.sh/opus-decoder"
+    // getting opus to work with the built in decoder is pain
+    // and no support on safari
+    // so we'll use this
+    import {OpusDecoder} from "https://esm.sh/opus-decoder"
 
-	const opusData = new Uint8Array(await (await fetch("kshmr.opus")).arrayBuffer());
+    const opusData = new Uint8Array(await (await fetch("kshmr.opus")).arrayBuffer());
 
 	// decode full for reference
 	const ctx = new AudioContext();
@@ -38,7 +38,7 @@
 	console.log("parsed pages: ", pages);
 
 	const decoder = new OpusDecoder();
-	await decoder.ready;
+	await this._ready;
 
 	const pcm = [];
 	for (const page of pages)

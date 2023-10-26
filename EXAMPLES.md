@@ -22,23 +22,24 @@ Decode frames of a codec without the whole file
 const buf = rDecodeFrames(RCodec.MP3, mp3Frames);
 ```
 The beating heart of rawr dsp - double buffering: seamlessly play back a series of buffers
+
 ```js
 // can pass ctx
-const node = new RDoubleBufferSource();
+const node = new RCDoubleBufferSrc();
 
 for (const piece of inputData) {
-  const buffer = doSomeProcessing(piece);
-  if (node.empty) {
-    // fills active buffer, and starts playback
+    const buffer = doSomeProcessing(piece);
+    if (node.empty) {
+        // fills active buffer, and starts playback
+        node.setBuffer(buffer);
+        continue;
+    }
+    // sets idle buffer because non-empty
     node.setBuffer(buffer);
-    continue;
-  }
-  // sets idle buffer because non-empty
-  node.setBuffer(buffer);
-  // node.saturated == true
-  await node.untilFlip();
-  // node.saturated == false
-  // await node.untilFlip();
-  // node.empty == true
+    // node.saturated == true
+    await node.untilFlip();
+    // node.saturated == false
+    // await node.untilFlip();
+    // node.empty == true
 }
 ```
