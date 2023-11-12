@@ -1,100 +1,105 @@
-registerProcessor("double-buffer", class extends AudioWorkletProcessor {
+registerProcessor(
+	"double-buffer",
+	class extends AudioWorkletProcessor {
+		__buffer1: Float32Array[];
+		__buffer2: Float32Array[];
 
-	#buffer1: Float32Array[];
-	#buffer2: Float32Array[];
+		__buffer2IsActive: boolean;
 
-	#buffer2IsActive: boolean;
+		__buffer1Ready: boolean;
+		__buffer2Ready: boolean;
 
-	#buffer1Ready: boolean;
-	#buffer2Ready: boolean;
+		__index: number;
 
-	#index: number;
+		constructor() {
+			super();
 
-	constructor() {
-		super();
+			this.__buffer1 = [];
+			this.__buffer2 = [];
+			this.__buffer1Ready = this.__buffer2Ready = this.__buffer2IsActive = false;
+			this.__index = 0;
 
-		this.#buffer1 = [];
-		this.#buffer2 = [];
-		this.#buffer1Ready = this.#buffer2Ready = this.#buffer2IsActive = false;
-		this.#index = 0;
+			this.port.onmessage = (e) => {
+				const wasEmpty = this.__isEmpty;
 
-		this.port.onmessage = (e) => {
-			const wasEmpty = this.#isEmpty;
+				// new buffer sent to us!
+				// write it to the inactive buffer
+				if (this.__buffer2IsActive) {
+					this.__buffer1 = e.data;
+					this.__buffer1Ready = true;
+				} else {
+					this.__buffer2 = e.data;
+					this.__buffer2Ready = true;
+				}
 
+				// if neither buffer filled, flip the buffers immediately to begin playback
+				if (wasEmpty) this.__flip();
+			};
+		}
 
-			// new buffer sent to us!
-			// write it to the inactive buffer
-			if (this.#buffer2IsActive) {
-				this.#buffer1 = e.data;
-				this.#buffer1Ready = true;
+		__flip() {
+			if (this.__buffer2IsActive) {
+				this.__buffer2Ready = false;
+				this.__buffer2IsActive = false;
 			} else {
-				this.#buffer2 = e.data;
-				this.#buffer2Ready = true;
+				this.__buffer1Ready = false;
+				this.__buffer2IsActive = true;
 			}
 
-			// if neither buffer filled, flip the buffers immediately to begin playback
-			if (wasEmpty) this.#flip();
-		};
-	}
+			this.__index = 0;
 
-	#flip() {
-		if (this.#buffer2IsActive) {
-			this.#buffer2Ready = false;
-			this.#buffer2IsActive = false;
-		}
-		else {
-			this.#buffer1Ready = false;
-			this.#buffer2IsActive = true;
+			if (this.__isEmpty) this.port.postMessage("EMPTY");
+			else this.port.postMessage("HALF");
 		}
 
-		this.#index = 0;
+		get __isEmpty() {
+			return !this.__buffer1Ready && !this.__buffer2Ready;
+		}
 
-		if (this.#isEmpty)
-			this.port.postMessage("EMPTY");
-		else this.port.postMessage("HALF");
-	}
+		get __isSaturated() {
+			return this.__buffer1Ready && this.__buffer2Ready;
+		}
 
-	get #isEmpty() {
-		return !this.#buffer1Ready && !this.#buffer2Ready;
-	}
+		get __activeBuffer() {
+			return this.__buffer2IsActive ? this.__buffer2 : this.__buffer1;
+		}
 
-	get #isSaturated() {
-		return this.#buffer1Ready && this.#buffer2Ready;
-	}
+		process(
+			_inputs: Float32Array[][],
+			outputs: Float32Array[][],
+			_parameters: Record<string, Float32Array>,
+		) {
+			if (this.__isEmpty) return true;
 
-	get #activeBuffer() {
-		return this.#buffer2IsActive ? this.#buffer2 : this.#buffer1;
-	}
+			if (!outputs.length) return true;
 
-	process(_inputs: Float32Array[][], outputs: Float32Array[][], _parameters: Record<string, Float32Array>) {
-		if (this.#isEmpty) return true;
+			if (!this.__activeBuffer.length) return true;
 
-		if (!outputs.length) return true;
+			const nChannels = Math.min(outputs[0].length, this.__activeBuffer.length);
 
-		if (!this.#activeBuffer.length) return true;
+			const target = outputs[0];
+			const source = this.__activeBuffer.map((b) => b.slice(this.__index));
 
-		for (let i = 0; i < Math.min(outputs[0].length, this.#activeBuffer.length); i++) {
-			const outputChannel = outputs[0][i];
-			const toSet = this.#activeBuffer[i].slice(this.#index);
+			for (let i = 0; i < nChannels; i++) target[i].set(source[i]);
 
-			outputChannel.set(toSet);
+			// NOTE: we make the assumption that all channels are equal size.
+			this.__index += source[0].length;
 
-			if (i === 0) this.#index += toSet.length;
+			if (source[0].length < target[0].length) {
+				this.__flip();
+				const leftToFill = target[0].length - source[0].length;
 
-			if (toSet.length < outputChannel.length)
-			{
-				this.#flip();
-				const remaining = outputChannel.length - toSet.length;
+				// write starting at the place we finished writing from (source[0].length)
+				// and cut down the source to only `leftToFill` length.
+				for (let i = 0; i < nChannels; i++)
+					target[i].set(source[i].slice(0, leftToFill), source[0].length);
 
-				outputChannel.set(this.#activeBuffer[i].slice(0, remaining), toSet.length);
-
-				if (i === 0) this.#index = remaining;
+				this.__index = leftToFill;
 			}
+
+			if (this.__index >= this.__activeBuffer[0].length) this.__flip();
+
+			return true;
 		}
-
-		if (this.#index >= this.#activeBuffer[0].length)
-			this.#flip();
-
-		return true;
-	}
-});
+	},
+);
