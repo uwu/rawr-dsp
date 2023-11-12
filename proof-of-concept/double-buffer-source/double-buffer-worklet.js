@@ -1,5 +1,4 @@
 class DoubleBufferProcessor extends AudioWorkletProcessor {
-
 	buffer1;
 	buffer2;
 
@@ -22,7 +21,6 @@ class DoubleBufferProcessor extends AudioWorkletProcessor {
 		this.port.onmessage = (e) => {
 			const wasEmpty = this.isEmpty;
 
-
 			// new buffer sent to us!
 			// write it to the inactive buffer
 			if (this.buffer2IsActive) {
@@ -41,15 +39,18 @@ class DoubleBufferProcessor extends AudioWorkletProcessor {
 	}
 
 	postState() {
-		this.port.postMessage(this.buffer2IsActive ? [this.buffer2Ready, this.buffer1Ready] : [this.buffer1Ready, this.buffer2Ready]);
+		this.port.postMessage(
+			this.buffer2IsActive
+				? [this.buffer2Ready, this.buffer1Ready]
+				: [this.buffer1Ready, this.buffer2Ready],
+		);
 	}
 
 	flip() {
 		if (this.buffer2IsActive) {
 			this.buffer2Ready = false;
 			this.buffer2IsActive = false;
-		}
-		else {
+		} else {
 			this.buffer1Ready = false;
 			this.buffer2IsActive = true;
 		}
@@ -79,14 +80,12 @@ class DoubleBufferProcessor extends AudioWorkletProcessor {
 
 		// for the real impl, handle uneven input and output buffer sizes.
 		// for this POC, we assume that the input size is always a multiple of 128 (quantum size)
-		for (let i = 0; i < outputChannel.length; i++)
-		{
-			outputChannel[i] = buf[i + (outputChannel.length * this.index)];
+		for (let i = 0; i < outputChannel.length; i++) {
+			outputChannel[i] = buf[i + outputChannel.length * this.index];
 		}
 		this.index++;
 
-		if (this.index >= (buf.length / outputChannel.length))
-			this.flip();
+		if (this.index >= buf.length / outputChannel.length) this.flip();
 
 		this.postState();
 

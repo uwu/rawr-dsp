@@ -7,13 +7,15 @@
   "main": "dist/index.js",
   "module": "dist/index.js",
   "scripts": {
-    "build": "tsc && node process-worklets.mjs"
+    "build": "tsc && node process-worklets.mjs",
+    "format": "biome format --write ."
   },
   "dependencies": {
     "codec-parser": "^2.4.3",
     "opus-decoder": "^0.7.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.3.3",
     "esbuild": "^0.19.5",
     "typescript": "^5.2.2"
   }
