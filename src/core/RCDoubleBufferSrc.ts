@@ -1,15 +1,15 @@
 // @ts-expect-error when compiled, worklets export their content
-import workletObjUrl from "../worklets/double-buffer";
-import { getContext, isWorkletLoaded, registerWorkletLoaded } from "./context";
+import workletObjUrl from "../worklets/double-buffer.js";
+import { getContext, isWorkletLoaded, registerWorkletLoaded } from "./context.js";
 
 // empty: both buffers are empty, not playing
 // half: one buffer is full, playing, waiting for next buffer
 // saturated: both buffers filed, playing
 export class RCDoubleBufferSrc {
 	readonly ctx: AudioContext;
-	readonly node: AudioWorkletNode;
 	readonly channels: number;
 	readonly ready: Promise<void>;
+	node: undefined | AudioWorkletNode;
 
 	state: "EMPTY" | "HALF" | "SATURATED" = "EMPTY";
 
@@ -18,23 +18,30 @@ export class RCDoubleBufferSrc {
 
 	constructor(channels = 2, customCtx?: AudioContext) {
 		this.channels = channels;
-		this.ctx = getContext(customCtx);
+		this.ctx = getContext(customCtx)
+		let internalReady = Promise.resolve();
 		if (!isWorkletLoaded("double-buffer", this.ctx)) {
-			this.ready = this.ctx.audioWorklet.addModule(workletObjUrl);
+			internalReady = this.ctx.audioWorklet.addModule(workletObjUrl);
 			registerWorkletLoaded("double-buffer", this.ctx);
-		} else this.ready = Promise.resolve();
+		}
 
-		this.node = new AudioWorkletNode(this.ctx, "double-buffer", {
-			outputChannelCount: [channels],
+		this.ready = new Promise<void>((res, rej) => {
+			internalReady.then(() => {
+				this.node = new AudioWorkletNode(this.ctx, "double-buffer", {
+					outputChannelCount: [channels],
+				});
+
+				this.node.port.onmessage = (ev) => {
+					this.state = ev.data;
+					(ev.data === "EMPTY" ? this.onempty : this.onflip).forEach((h) => h());
+				};
+
+				res();
+			}, rej);
 		});
-
-		this.node.port.onmessage = (ev) => {
-			this.state = ev.data;
-			(ev.data === "EMPTY" ? this.onempty : this.onflip).forEach((h) => h());
-		};
 	}
 
-	setBuffer(data: Float32Array[]) {
+	async setBuffer(data: Float32Array[]) {
 		if (data.length)
 			for (let i = 1; i < data.length; i++)
 				if (data[0].length !== data[i].length)
@@ -43,14 +50,18 @@ export class RCDoubleBufferSrc {
 					);
 
 		this.state = "SATURATED";
-		this.node.port.postMessage(data);
+
+		if (this.node) await this.ready;
+		this.node!.port.postMessage(data);
 	}
 
-	connect(dest?: AudioNode) {
-		this.node.connect(dest ?? this.ctx.destination);
+	async connect(dest?: AudioNode) {
+		if (this.node) await this.ready;
+		this.node!.connect(dest ?? this.ctx.destination);
 	}
 
-	disconnect(dest?: AudioNode) {
-		this.node.disconnect(dest!);
+	async disconnect(dest?: AudioNode) {
+		if (this.node) await this.ready;
+		this.node!.disconnect(dest!);
 	}
 }

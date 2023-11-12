@@ -13,9 +13,9 @@ for (const file of await readdir("dist/worklets")) {
 	});
 
 	const wrappedContent =
-		"export default URL.createObjectURL(new Blob(`" +
+		"export default URL.createObjectURL(new Blob([`" +
 		min.code.replaceAll("`", "\\`").trim() +
-		'`,{type:"text/javascript"}))';
+		'`],{type:"text/javascript"}))';
 
 	await writeFile(fullPath, wrappedContent);
 }

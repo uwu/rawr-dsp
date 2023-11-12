@@ -1,0 +1,55 @@
+<script type="module">
+	import { RCDoubleBufferSrc } from "../dist/core/RCDoubleBufferSrc.js";
+	import {getContext} from "../dist/core/context.js";
+
+	const source = new RCDoubleBufferSrc();
+	console.time("worker loading");
+	await source.ready;
+	console.timeEnd("worker loading");
+
+	const audioData = await getContext().decodeAudioData(await fetch("../proof-of-concept/opus-frame-decoding/kshmr.opus").then(r => r.arrayBuffer()));
+
+	// split into random size chunks between 128 and 128000 length
+	const buffers = [];
+	let idx = 0;
+	while (idx < audioData.length) {
+		const remaining = audioData.length - idx;
+		const amtThisTime = Math.min(~~(128 * (1 + 1000 * Math.random())), remaining);
+
+		const bufs = [];
+
+		for (let chanI = 0; chanI < audioData.numberOfChannels; chanI++)
+		{
+			const buf = new Float32Array(amtThisTime);
+			audioData.copyFromChannel(buf, chanI, idx);
+			bufs.push(buf);
+		}
+
+		buffers.push(bufs);
+		idx += amtThisTime;
+	}
+
+	await new Promise(res => document.onclick = res);
+
+	source.connect();
+	getContext().resume();
+
+	// this is a very scuffed feeder for the double buffer, write a better one
+	// feed the first buffer to get us into a healthy state
+	source.setBuffer(buffers.shift());
+	// play them all!
+	let toPlayThisTime;
+	while (toPlayThisTime = buffers.shift())
+	{
+
+		source.setBuffer(toPlayThisTime);
+		await new Promise(res => {
+			const handler = () => {
+				res();
+				source.onflip.delete(handler);
+			};
+			source.onflip.add(handler);
+		})
+	}
+
+</script>

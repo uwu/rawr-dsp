@@ -78,9 +78,14 @@ registerProcessor(
 			const nChannels = Math.min(outputs[0].length, this.__activeBuffer.length);
 
 			const target = outputs[0];
-			const source = this.__activeBuffer.map((b) => b.slice(this.__index));
+			const source = this.__activeBuffer.map((b) => b.slice(this.__index, target[0].length - this.__index));
 
-			for (let i = 0; i < nChannels; i++) target[i].set(source[i]);
+			try {
+				for (let i = 0; i < nChannels; i++) target[i].set(source[i]);
+			} catch (e){
+				console.error("line 86");
+				throw e;
+			}
 
 			// NOTE: we make the assumption that all channels are equal size.
 			this.__index += source[0].length;
@@ -91,8 +96,14 @@ registerProcessor(
 
 				// write starting at the place we finished writing from (source[0].length)
 				// and cut down the source to only `leftToFill` length.
-				for (let i = 0; i < nChannels; i++)
-					target[i].set(source[i].slice(0, leftToFill), source[0].length);
+				try {
+					for (let i = 0; i < nChannels; i++)
+						target[i].set(source[i].slice(0, leftToFill), source[0].length);
+				} catch (e){
+					console.error("line 103");
+					throw e;
+				}
+
 
 				this.__index = leftToFill;
 			}
