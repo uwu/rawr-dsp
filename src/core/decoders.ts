@@ -1,7 +1,7 @@
 import {CodecFrame, OggPage} from "codec-parser";
-import {getContext} from "./context";
-import {joinBufs} from "./bufferutils";
-import {RCDecoder} from "./types";
+import {getContext} from "./context.js";
+import {joinBufs} from "./bufferutils.js";
+import {RCDecoder} from "./types.js";
 import {OpusDecoder} from "opus-decoder";
 
 // decodes a set of chunks using the browser's decodeAudioData method

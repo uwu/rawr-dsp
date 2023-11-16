@@ -1,0 +1,35 @@
+<script type="importmap">
+	{ "imports": { "codec-parser": "https://esm.sh/codec-parser", "opus-decoder": "https://esm.sh/opus-decoder" } }
+</script>
+
+<script type="module">
+	import { RCMp3Chunker, RCAacChunker, RCFlacChunker, RCOggChunker } from "../dist/core/chunkers.js";
+
+	const grabAudio = (url) => fetch(url).then(r => r.arrayBuffer());
+
+	const opusData = await grabAudio("../proof-of-concept/opus-frame-decoding/kshmr.opus");
+	const mp3Data = await grabAudio("../proof-of-concept/mp3-frame-decoding/kshmr.mp3");
+	const flacData = await grabAudio("../proof-of-concept/kshmr.flac");
+	const aacData = await grabAudio("../proof-of-concept/kshmr.aac");
+
+	for (const [data, name, chunker] of [[opusData, "opus", RCOggChunker], [mp3Data, "mp3", RCMp3Chunker], [flacData, "flac", RCFlacChunker], [aacData, "aac", RCAacChunker]]) {
+		console.time(name);
+
+		const c = new chunker();
+		const out = [];
+
+		for (let i = 0; i < data.byteLength;) {
+			const arrLen = Math.min(data.byteLength - i, 1 + ~~(Math.random() * 1000));
+			const subArr = data.slice(i, i + arrLen);
+			i += arrLen;
+
+			out.push(c.next(new Uint8Array(subArr)));
+		}
+
+		console.timeEnd(name);
+		console.log(out);
+	}
+
+	console.log("FINISHED TESTING CHUNKERS");
+
+</script>
