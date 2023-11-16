@@ -37,8 +37,8 @@ Start building the basics of rawr dsp
   * [ ] WAV
   * [ ] FLAC
   * [ ] QOA (not common but should be useful for testing)
-  * [ ] MP3 (!!!!)
-  * [ ] Opus
+  * [x] MP3 (!!!!)
+  * [x] Opus
   * [ ] AAC
   * [ ] Vorbis
 - [ ] Chunk aligner

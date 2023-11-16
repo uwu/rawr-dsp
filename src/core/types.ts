@@ -11,3 +11,11 @@ export interface RCSrc {
 export interface RCChunker<T> {
 	next(chunk: Uint8Array): T[];
 }
+
+/*export interface RCDecoderSync<TI> extends RCDecoder<TI> {
+	next(chunk: TI[]): Float32Array[];
+}*/
+
+export interface RCDecoder<TI> {
+	next(chunk: TI[]): /*Float32Array[] |*/ Promise<Float32Array[]>;
+}
