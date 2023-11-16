@@ -49,19 +49,19 @@ export class RCDoubleBufferSrc {
 						"[RCDoubleBufferSrc] All channels in a buffer must be the same size.",
 					);
 
-		this.state = "SATURATED";
+		this.state = (this.state === "EMPTY" ? "HALF" : "SATURATED");
 
-		if (this.node) await this.ready;
+		if (!this.node) await this.ready;
 		this.node!.port.postMessage(data);
 	}
 
 	async connect(dest?: AudioNode) {
-		if (this.node) await this.ready;
+		if (!this.node) await this.ready;
 		this.node!.connect(dest ?? this.ctx.destination);
 	}
 
 	async disconnect(dest?: AudioNode) {
-		if (this.node) await this.ready;
+		if (!this.node) await this.ready;
 		this.node!.disconnect(dest!);
 	}
 }

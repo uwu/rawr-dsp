@@ -9,6 +9,7 @@
 
 	const audioData = await getContext().decodeAudioData(await fetch("../proof-of-concept/opus-frame-decoding/kshmr.opus").then(r => r.arrayBuffer()));
 
+	debugger;
 	// split into random size chunks between 128 and 128000 length
 	const buffers = [];
 	let idx = 0;
@@ -34,15 +35,13 @@
 	source.connect();
 	getContext().resume();
 
-	// this is a very scuffed feeder for the double buffer, write a better one
-	// feed the first buffer to get us into a healthy state
-	source.setBuffer(buffers.shift());
 	// play them all!
 	let toPlayThisTime;
 	while (toPlayThisTime = buffers.shift())
 	{
 
 		source.setBuffer(toPlayThisTime);
+		console.log("main thread: fed buffer");
 		await new Promise(res => {
 			const handler = () => {
 				res();

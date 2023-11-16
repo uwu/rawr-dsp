@@ -32,6 +32,9 @@ registerProcessor(
 					this.__buffer2Ready = true;
 				}
 
+				//console.log("worklet: received and written to buffer ", Number(!this.__buffer2IsActive) + 1);
+				//console.log("worklet: buffer state: ", this.__buffer1[0]?.length, this.__buffer2[0]?.length);
+
 				// if neither buffer filled, flip the buffers immediately to begin playback
 				if (wasEmpty) this.__flip();
 			};
@@ -78,7 +81,7 @@ registerProcessor(
 			const nChannels = Math.min(outputs[0].length, this.__activeBuffer.length);
 
 			const target = outputs[0];
-			const source = this.__activeBuffer.map((b) => b.slice(this.__index, target[0].length - this.__index));
+			const source = this.__activeBuffer.map((b) => b.slice(this.__index, target[0].length + this.__index));
 
 			try {
 				for (let i = 0; i < nChannels; i++) target[i].set(source[i]);
