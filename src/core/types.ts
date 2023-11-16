@@ -7,3 +7,7 @@ export interface RCSrc {
 	connect(dest?: AudioNode): Promise<void>;
 	disconnect(dest?: AudioNode): Promise<void>;
 }
+
+export interface RCChunker<T> {
+	next(chunk: Uint8Array): T[];
+}

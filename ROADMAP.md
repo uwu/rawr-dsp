@@ -32,7 +32,8 @@ Start building the basics of rawr dsp
 - [x] Double buffering source
 - [x] Queue source
 - [ ] Chunking sink
-- [ ] Chunk decoders, splitters for easy or particularly desirable formats
+- [x] Codec chunkers
+- Decoders for easy or particularly desirable formats
   * [ ] WAV
   * [ ] FLAC
   * [ ] QOA (not common but should be useful for testing)
