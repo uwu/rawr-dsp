@@ -30,7 +30,7 @@ Start building the basics of rawr dsp
 - [ ] Shared tools
   * [x] Automatic audio context use and resuming
 - [x] Double buffering source
-- [ ] Queue source
+- [x] Queue source
 - [ ] Chunking sink
 - [ ] Chunk decoders, splitters for easy or particularly desirable formats
   * [ ] WAV

@@ -32,8 +32,8 @@ registerProcessor(
 					this.__buffer2Ready = true;
 				}
 
-				//console.log("worklet: received and written to buffer ", Number(!this.__buffer2IsActive) + 1);
-				//console.log("worklet: buffer state: ", this.__buffer1[0]?.length, this.__buffer2[0]?.length);
+				console.log("worklet: received and written to buffer ", Number(!this.__buffer2IsActive) + 1);
+				console.log("worklet: buffer state: ", this.__buffer1[0]?.length, this.__buffer2[0]?.length);
 
 				// if neither buffer filled, flip the buffers immediately to begin playback
 				if (wasEmpty) this.__flip();
